@@ -63,17 +63,7 @@ namespace UAssetGUI
         public static UAGConfigData Data;
         public static Dictionary<string, string> AllMappings = new Dictionary<string, string>();
         public static List<string> AllScriptIDs = new List<string>();
-
-        public static bool SafeToAccessConfigFolder = false;
-        public static bool IsPortable = false;
-        public static string ConfigFolder
-        {
-            get
-            {
-                if (!SafeToAccessConfigFolder) throw new InvalidOperationException("Attempt to access UAGConfig.ConfigFolder before it is ready");
-                return IsPortable ? Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "Data") : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "UAssetGUI");
-            }
-        }
+        public static string ConfigFolder => Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "Data");
         public static string MappingsFolder => Path.Combine(ConfigFolder, "Mappings");
         public static string StagingFolder => Path.Combine(ConfigFolder, "Staging");
         public static string ExtractedFolder => Path.Combine(ConfigFolder, "Extracted");
@@ -122,7 +112,7 @@ namespace UAssetGUI
             newPath = newPath.Replace('/', Path.DirectorySeparatorChar);
 
             var finalPath = DifferentStagingPerPak ? Path.Combine(StagingFolder, Path.GetFileNameWithoutExtension(CurrentContainerPath), newPath) : Path.Combine(StagingFolder, newPath);
-            try { Directory.CreateDirectory(Path.GetDirectoryName(finalPath)); } catch { return; } // fail silently if cant make the directory we need
+            try { Directory.CreateDirectory(Path.GetDirectoryName(finalPath)); } catch { return; }
 
             UAGUtils.DeleteDirectoryQuick(finalPath, true);
 
@@ -133,7 +123,6 @@ namespace UAssetGUI
 
         public static void StageFile(DirectoryTreeItem item, InteropType interopType, string newPath = null)
         {
-            // recursive if we were given a directory
             if (!item.IsFile)
             {
                 foreach (var child in item.Children) StageFile(child.Value, interopType, newPath == null ? null : Path.Combine(newPath, child.Value.Name));
@@ -146,9 +135,9 @@ namespace UAssetGUI
             string outputPath = item.SaveFileToTemp(interopType);
             var finalPath = DifferentStagingPerPak ? Path.Combine(StagingFolder, Path.GetFileNameWithoutExtension(item.ParentForm.CurrentContainerPath), newPath) : Path.Combine(StagingFolder, newPath);
             if (outputPath == null || finalPath == null) return;
-            try { Directory.CreateDirectory(Path.GetDirectoryName(finalPath)); } catch { return; } // fail silently if cant make the directory we need
+            try { Directory.CreateDirectory(Path.GetDirectoryName(finalPath)); } catch { return; }
 
-            UAGUtils.DeleteDirectoryQuick(finalPath, true); // if we turn a directory into a file, try and get rid of the directory
+            UAGUtils.DeleteDirectoryQuick(finalPath, true);
 
             UAGUtils.CopyFileQuick(outputPath, finalPath, true);
             UAGUtils.CopyFileQuick(Path.ChangeExtension(outputPath, ".uexp"), Path.ChangeExtension(finalPath, ".uexp"), true);
@@ -162,7 +151,6 @@ namespace UAssetGUI
         {
             var finalPath = Path.Combine(ExtractedFolder, item.FullPath.Replace('/', Path.DirectorySeparatorChar));
 
-            // recursive if we were given a directory
             if (!item.IsFile)
             {
                 foreach (var child in item.Children) ExtractFile(child.Value, interopType, stream2, reader2);
@@ -181,13 +169,12 @@ namespace UAssetGUI
                     mappings = new Usmap(value);
                     return true;
                 }
-                catch 
+                catch
                 {
                     UAGUtils.InvokeUI(() =>
                     {
                         MessageBox.Show("Failed to parse mappings: " + name, "Notice");
 
-                        // update list of mappings for good measure
                         foreach (var form in Application.OpenForms)
                         {
                             if (form is Form1 form1)
@@ -202,7 +189,7 @@ namespace UAssetGUI
             mappings = null;
             return false;
         }
-        
+
         public static void RefreshAllScriptIDs()
         {
             Directory.CreateDirectory(ScriptsFolder);

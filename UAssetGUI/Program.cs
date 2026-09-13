@@ -26,50 +26,36 @@ namespace UAssetGUI
             {
                 if (stream == null) return null;
 
-                // compare hash of new compressed data to hash of compressed data already on disk (saved as .sha256 file)
-                // this avoids unnecessary disk writes and improves load time
-                byte[] newStreamHash = Array.Empty<byte>();
+                byte[] newStreamHash;
                 using (SHA256 hash = SHA256.Create())
                 {
                     newStreamHash = hash.ComputeHash(stream);
                     stream.Seek(0, SeekOrigin.Begin);
                 }
 
-                byte[] currentStreamHash = Array.Empty<byte>();
                 string streamHashPath = Path.ChangeExtension(outPath, Path.GetExtension(outPath) + ".sha256");
-                try
-                {
-                    if (File.Exists(streamHashPath)) currentStreamHash = File.ReadAllBytes(streamHashPath);
-                }
-                catch
-                {
-                    currentStreamHash = Array.Empty<byte>();
-                }
+                byte[] currentStreamHash = File.Exists(streamHashPath)
+                    ? File.ReadAllBytes(streamHashPath)
+                    : Array.Empty<byte>();
 
-                if (currentStreamHash.Length > 0 && newStreamHash.Length > 0 && currentStreamHash.SequenceEqual(newStreamHash) && File.Exists(outPath))
+                if (currentStreamHash.Length > 0 && currentStreamHash.SequenceEqual(newStreamHash) && File.Exists(outPath))
                 {
-                    // hashes are equal, OK to skip decompress/write routine
                     return outPath;
                 }
 
                 try
                 {
                     using (FileStream newFileStream = File.Open(outPath, FileMode.Create, FileAccess.Write))
+                    using (var gzipStream = new GZipStream(stream, CompressionMode.Decompress))
                     {
-                        using (var gzipStream = new GZipStream(stream, CompressionMode.Decompress))
-                        {
-                            gzipStream.CopyTo(newFileStream);
-                        }
+                        gzipStream.CopyTo(newFileStream);
                     }
 
-                    // write new hash
                     File.WriteAllBytes(streamHashPath, newStreamHash);
-
                     return outPath;
                 }
-                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is DirectoryNotFoundException || ex is FileNotFoundException)
+                catch
                 {
-                    // OK as long as the file exists, probably another instance of the software is already open
                     return File.Exists(outPath) ? outPath : null;
                 }
             }
@@ -78,52 +64,18 @@ namespace UAssetGUI
         private static List<Type> strongRefs = new List<Type>();
         public static List<string> args;
 
-        /// <summary>
-        /// The main entry point for the application.
-        /// </summary>
         [STAThread]
         public static void Main()
         {
             try
             {
                 if (Environment.OSVersion.Version.Major >= 6) SetProcessDPIAware();
+
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                Application.SetDefaultFont(new Font(new FontFamily("Microsoft Sans Serif"), 8.25f)); // default font changed in .NET Core 3.0
+                Application.SetDefaultFont(new Font(new FontFamily("Microsoft Sans Serif"), 8.25f));
 
                 args = Environment.GetCommandLineArgs().ToList();
-
-                UAGConfig.IsPortable = false;
-
-                for (int i = 0; i < args.Count; i++)
-                {
-                    switch (args[i])
-                    {
-                        case "portable":
-                        case "--portable":
-                            UAGConfig.IsPortable = true;
-                            args.RemoveAt(i);
-                            i--;
-                            break;
-                    }
-                }
-
-                // if a file at Data\config.json exists and has the word "UAssetGUI" in it, start up in portable mode
-                try
-                {
-                    string desiredConfigFile = Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "Data", "config.json");
-                    if (File.Exists(desiredConfigFile) && File.ReadAllText(desiredConfigFile).Contains("UAssetGUI"))
-                    {
-                        UAGConfig.IsPortable = true;
-                    }
-                }
-                catch
-                {
-
-                }
-
-                // only from here is it safe to reference ConfigFolder
-                UAGConfig.SafeToAccessConfigFolder = true;
 
                 if (args.Count >= 2)
                 {
@@ -131,8 +83,6 @@ namespace UAssetGUI
 
                     switch (args[1].ToLowerInvariant())
                     {
-                        // tojson <source> <destination> <engine version> [mappings name]
-                        // UAssetGUI tojson A.umap B.json 23 Outriders
                         case "tojson":
                             UAGConfig.LoadMappings();
 
@@ -146,19 +96,16 @@ namespace UAssetGUI
                             string jsonSerializedAsset = new UAsset(args[2], selectedVer, selectedMappings).SerializeJson(Newtonsoft.Json.Formatting.Indented);
                             File.WriteAllText(args[3], jsonSerializedAsset);
                             return;
-                        // fromjson <source> <destination> [mappings name]
-                        // UAssetGUI fromjson B.json A.umap Outriders
+
                         case "fromjson":
                             UAGConfig.LoadMappings();
 
                             if (args.Count < 4) break;
                             if (args.Count >= 5) UAGConfig.TryGetMappings(args[4], out selectedMappings);
 
-                            UAsset jsonDeserializedAsset = null;
+                            UAsset jsonDeserializedAsset;
                             using (var sr = new FileStream(args[2], FileMode.Open))
-                            {
                                 jsonDeserializedAsset = UAsset.DeserializeJson(sr);
-                            }
 
                             if (jsonDeserializedAsset != null)
                             {
@@ -170,19 +117,16 @@ namespace UAssetGUI
                     }
                 }
 
-                // set up assembly extracting (needs config folder to be set up)
                 try
                 {
-                    // extract .dll.gz resources and load them on demand
                     AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
                     {
                         string libsPath = Path.Combine(UAGConfig.ConfigFolder, "Libraries");
                         Directory.CreateDirectory(UAGConfig.ConfigFolder);
                         Directory.CreateDirectory(libsPath);
 
-                        string outPath = ExtractCompressedResource("UAssetGUI." + assemblyName.Name + ".dll.gz", Path.Combine(libsPath, assemblyName.Name + ".dll"));
-                        if (outPath == null) return null; // if not found, fall back to default behavior
-                        return Assembly.LoadFrom(outPath);
+                        string outPath = ExtractCompressedResource("UAssetGUI." + assemblyName.Name + ".dll.gz",Path.Combine(libsPath, assemblyName.Name + ".dll"));
+                        return outPath == null ? null : Assembly.LoadFrom(outPath);
                     };
 
                     strongRefs.Add(typeof(System.Collections.Immutable.ImmutableArray));
@@ -195,8 +139,9 @@ namespace UAssetGUI
 
                 Form1 f1 = new Form1
                 {
-                    Size = new System.Drawing.Size(1000, 700)
+                    Size = new Size(1000, 700)
                 };
+
                 Application.Run(f1);
             }
             catch (Exception ex)

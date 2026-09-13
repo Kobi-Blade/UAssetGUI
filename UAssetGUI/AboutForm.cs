@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.IO;
 using System.Reflection;
 using System.Windows.Forms;
@@ -7,6 +8,7 @@ namespace UAssetGUI
 {
     public partial class AboutForm : Form
     {
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string AboutText
         {
             get

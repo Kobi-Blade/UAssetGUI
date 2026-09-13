@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.Emit;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.Drawing;
@@ -1835,6 +1836,7 @@ namespace UAssetGUI
         }
 
         private ContextMenuStrip _currentDataGridViewStrip;
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public ContextMenuStrip CurrentDataGridViewStrip
         {
             get
