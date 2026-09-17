@@ -153,6 +153,7 @@ namespace UAssetGUI
 
             if (!item.IsFile)
             {
+                Directory.CreateDirectory(finalPath);
                 foreach (var child in item.Children) ExtractFile(child.Value, interopType, stream2, reader2);
                 return finalPath;
             }
